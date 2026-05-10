@@ -1,0 +1,43 @@
+# Multi-pet recipe — every AI gets its own desktop sprite.
+#
+# Run `openpets-bridge list-pets` first to see which packs you have
+# installed and to copy the right paths in below. Then drop this into
+# `~/.config/openpets-bridge/config.toml` (or use --config /path) and
+# restart the bridge.
+
+[bridge]
+mode = "multi"
+poll_interval_s = 1.0
+push_throttle_s = 1.5
+
+# ---- Cowork (Claude desktop) ----------------------------------------------
+[sources.cowork]
+enabled = true
+icon  = "🤝"
+label = "Cowork"
+
+[sources.cowork.extra]
+# Replace with a path from `openpets-bridge list-pets`. Mandalorian is
+# just an example — any 8x9 sprite atlas works.
+pet_dir = "~/Library/Application Support/OpenPets/Pets/mandalorian"
+socket  = "/tmp/openpets-cowork.sock"
+
+# ---- Codex CLI ------------------------------------------------------------
+[sources.codex_cli]
+enabled = true
+icon  = "🟢"
+label = "Codex"
+
+[sources.codex_cli.extra]
+pet_dir = "~/.codex/pets/grogu-kid"
+socket  = "/tmp/openpets-codex.sock"
+
+# ---- Claude Code CLI ------------------------------------------------------
+[sources.claude_code]
+enabled = false              # turn on when you use the `claude` CLI
+icon  = "🟠"
+label = "Claude Code"
+
+[sources.claude_code.extra]
+pet_dir = "~/Library/Application Support/OpenPets/Pets/starcorn"
+socket  = "/tmp/openpets-claude-code.sock"

@@ -3,25 +3,27 @@
 Each enabled source spawns its own ``openpets run --pet <pack> --socket <path>``
 child process and routes its updates to that dedicated host. Bubbles still
 use threadId per-conversation, but each AI now has a visually distinct
-sprite (Mando for Cowork, Starcorn for Codex, …) on the desktop.
+sprite (e.g. Mando for Cowork, Grogu for Codex CLI) on the desktop.
 
-Status: **stub** in 0.1.0. The plumbing is here; spawn/lifecycle is wired
-but not yet battle-tested. Open issues:
+Defaults & failure handling:
 
-* OpenPets currently allows only one host per macOS session by default
-  (singleton check on the IPC socket). Need to verify ``--socket`` truly
-  side-steps that on the user's machine.
-* Position management for multiple pets (avoid stacking on top of each
-  other) is left to the user via the OpenPets tray menu / ``positions.json``.
+* If a source has no ``[sources.<id>.extra] pet_dir = "..."``, that source
+  falls back to the default OpenPets host (the menubar app's active pet).
+* If ``pet_dir`` doesn't exist on disk, the source is skipped (with a clear
+  log line pointing at ``openpets-bridge list-pets``).
+* If the host's socket fails to bind within 2 s after spawn, the bridge
+  warns and continues — notify will degrade gracefully.
+* Stale orphan socket files from previous crashes are removed before bind.
 
-Use ``mode = "single"`` until this hardens. Track progress in:
-https://github.com/MacSiem/openpets-bridge/issues
+Position management for multiple pets (avoid stacking) is left to the user
+via the OpenPets tray menu / ``positions.json``.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import os.path
 import shlex
 import subprocess
 import time
@@ -41,6 +43,18 @@ class _ThreadState:
     last_status: str = ""
     last_text: str = ""
     last_push_ts: float = 0.0
+
+
+def _socket_alive(path: str, bin_path: str) -> bool:
+    """Probe whether something is listening on the given socket."""
+    try:
+        return subprocess.run(
+            [bin_path, "ping", "--socket", path],
+            check=False, timeout=2,
+            capture_output=True, text=True,
+        ).returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
 
 
 class MultiPetMode:
@@ -68,14 +82,35 @@ class MultiPetMode:
             extra = cfg.extra or {}
             pet_dir = extra.get("pet_dir") or extra.get("pet")
             socket_path = extra.get("socket") or f"/tmp/openpets-{sid}.sock"
+
             if not pet_dir:
                 log.warning(
-                    "multi-pet: source %s has no pet pack configured (set "
-                    "[sources.%s.extra] pet_dir=... or pet=...) — skipping host",
+                    "multi-pet: source %s has no pet pack — set "
+                    "[sources.%s.extra] pet_dir=\"...\". Falling back to the "
+                    "default OpenPets host (menubar app's active pet).",
                     sid, sid,
                 )
+                self._clients[sid] = OpenPetsClient(socket_path=None, binary=bin_path)
                 continue
-            args = [bin_path, "run", "--pet", str(pet_dir), "--socket", socket_path]
+
+            pet_path = os.path.expanduser(str(pet_dir))
+            if not os.path.isdir(pet_path):
+                log.error(
+                    "multi-pet: pet pack for %s not found at %s — skipping. "
+                    "Run `openpets-bridge list-pets` to see installed packs.",
+                    sid, pet_path,
+                )
+                continue
+
+            # If a stale socket file exists (orphaned from a previous crash),
+            # remove it — Unix sockets can't be re-bound otherwise.
+            if os.path.exists(socket_path) and not _socket_alive(socket_path, bin_path):
+                try:
+                    os.unlink(socket_path)
+                except OSError:
+                    pass
+
+            args = [bin_path, "run", "--pet", pet_path, "--socket", socket_path]
             log.info("multi-pet: spawning %s → %s", sid, shlex.join(args))
             try:
                 proc = subprocess.Popen(
@@ -84,19 +119,37 @@ class MultiPetMode:
                     env={**os.environ,
                          "PATH": "/opt/homebrew/bin:" + os.environ.get("PATH", "")},
                 )
-                self._hosts[sid] = proc
-                self._clients[sid] = OpenPetsClient(socket_path=socket_path,
-                                                    binary=bin_path)
             except Exception as e:  # noqa: BLE001
                 log.error("multi-pet: failed to spawn %s host: %s", sid, e)
+                continue
 
+            # Give the host ~2 s to come up + bind the socket.
+            for _ in range(20):
+                if os.path.exists(socket_path):
+                    break
+                time.sleep(0.1)
+            else:
+                log.warning(
+                    "multi-pet: %s socket %s did not appear within 2 s — the "
+                    "host may have failed to start. Check `pgrep -f 'openpets "
+                    "run'` and the OpenPets logs.",
+                    sid, socket_path,
+                )
+            self._hosts[sid] = proc
+            self._clients[sid] = OpenPetsClient(socket_path=socket_path,
+                                                binary=bin_path)
+
+    # ------------------------------------------------------------------
     def shutdown(self) -> None:
         for sid, proc in list(self._hosts.items()):
             try:
                 proc.terminate()
                 proc.wait(timeout=3)
             except Exception:  # noqa: BLE001
-                proc.kill()
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
         self._hosts.clear()
         self._clients.clear()
 
@@ -105,7 +158,7 @@ class MultiPetMode:
         for u in updates:
             client = self._clients.get(u.source_id)
             if client is None:
-                continue  # this source has no dedicated host
+                continue  # this source has no host (skipped above)
             cfg = self._configs.get(u.source_id)
             icon = cfg.icon if cfg else ""
             title = f"{icon} {u.title}".strip()

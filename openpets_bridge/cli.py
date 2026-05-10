@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__
 from . import config as bridgeconfig
 from . import orchestrator
+from . import pets as petsmod
 from .openpets_client import OpenPetsClient
 
 
@@ -115,6 +116,31 @@ def cmd_install(args) -> int:
     return 0
 
 
+def cmd_list_pets(args) -> int:
+    """List installed OpenPets pet packs across the standard locations."""
+    pets = petsmod.discover()
+    if not pets:
+        print("No pet packs found in any of:")
+        for root in petsmod.DEFAULT_PET_ROOTS:
+            print(f"  - {root}")
+        print("\nInstall a pack into one of those folders, or download one"
+              " from https://openpets.dev")
+        return 1
+    print(f"{len(pets)} pet pack(s) installed:\n")
+    for p in pets:
+        marker = "✓" if p.has_spritesheet else "✗ (missing spritesheet)"
+        print(f"  {marker} {p.display_name}  [{p.pet_id}]")
+        print(f"      {p.path}")
+        if p.description:
+            print(f"      {p.description}")
+        print()
+    print("To use one in multi-pet mode, copy its absolute path into your config:\n")
+    print('  [sources.<source_id>.extra]')
+    print(f'  pet_dir = "{pets[0].path}"')
+    print(f'  socket  = "/tmp/openpets-<source_id>.sock"')
+    return 0
+
+
 def cmd_uninstall(args) -> int:
     plist = _launchd_plist_path()
     uid = os.getuid()
@@ -154,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sp_un = sub.add_parser("uninstall", help="Stop + remove launchd agent")
     sp_un.set_defaults(func=cmd_uninstall)
+
+    sp_pets = sub.add_parser("list-pets",
+                             help="Discover installed OpenPets pet packs")
+    sp_pets.set_defaults(func=cmd_list_pets)
 
     args = p.parse_args(argv)
     return args.func(args)

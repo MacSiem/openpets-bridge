@@ -1,0 +1,24 @@
+# Streaming / pair-coding / screen-share recipe.
+#
+# Bubble shows ONLY the tool glyph (▶ ✎ 📖 🔎 …) — never the file path,
+# command, search query, or prompt. Logs are already title/body-free.
+
+[bridge]
+mode = "single"
+poll_interval_s = 1.0
+push_throttle_s = 2.0
+
+[sources.cowork]
+enabled = true
+icon = "🤝"
+redact_body = true           # ← privacy
+
+[sources.codex_cli]
+enabled = true
+icon = "🟢"
+redact_body = true           # ← privacy
+
+[sources.claude_code]
+enabled = false
+icon = "🟠"
+redact_body = true

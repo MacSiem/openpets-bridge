@@ -1,0 +1,18 @@
+# Recipe: only follow Codex CLI activity, ignore everything else.
+#
+# Useful if Cowork or Claude Code are too chatty for your taste, or if
+# you're not using them today.
+
+[bridge]
+mode = "single"
+
+[sources.cowork]
+enabled = false
+
+[sources.codex_cli]
+enabled = true
+icon  = "🟢"
+label = "Codex"
+
+[sources.claude_code]
+enabled = false

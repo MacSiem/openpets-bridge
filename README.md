@@ -51,6 +51,28 @@ openpets-bridge status      # sanity check (sources enabled + pet ping)
 openpets-bridge install     # registers the launchd agent
 ```
 
+### Discover installed pet packs
+
+```bash
+openpets-bridge list-pets
+```
+
+Walks `~/Library/Application Support/OpenPets/Pets/`, `~/.codex/pets/`,
+and the standard XDG locations. Useful when configuring multi-pet mode.
+
+### Recipes
+
+Drop-in configs in [`examples/`](./examples):
+
+* [`config.toml`](./examples/config.toml) — the default (one pet, AI icon prefix).
+* [`config-multi-pet.toml`](./examples/config-multi-pet.toml) — one pet sprite per AI source.
+* [`config-stream-safe.toml`](./examples/config-stream-safe.toml) — privacy mode for screen-sharing / live-streaming.
+* [`config-codex-only.toml`](./examples/config-codex-only.toml) — follow only Codex CLI activity.
+
+```bash
+openpets-bridge run --config /path/to/recipe.toml
+```
+
 ## Configure
 
 Three tiers depending on how much you want to fiddle — full guide in
