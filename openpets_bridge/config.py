@@ -90,6 +90,7 @@ def _build_source_config(sid: str, raw: dict) -> SourceConfig:
         label=str(raw.get("label", defaults.get("label", sid))),
         icon=str(raw.get("icon", defaults.get("icon", "•"))),
         pet=raw.get("pet"),
+        redact_body=bool(raw.get("redact_body", defaults.get("redact_body", False))),
         extra=dict(raw.get("extra", defaults.get("extra", {}))),
     )
 
@@ -141,16 +142,22 @@ push_throttle_s = 1.5
 enabled = true
 label = "Cowork"
 icon = "🤝"
+# Set redact_body = true to never echo tool inputs (file paths, commands,
+# search queries, prompts) into the bubble or the log — only the tool
+# glyph remains. Useful when streaming, pair-coding, or screen-sharing.
+redact_body = false
 
 [sources.codex_cli]
 enabled = true
 label = "Codex"
 icon = "🟢"
+redact_body = false
 
 [sources.claude_code]
 enabled = false           # turn on when you use the `claude` CLI
 label = "Claude Code"
 icon = "🟠"
+redact_body = false
 
 # ---- Multi-pet mode (optional) -------------------------------------------
 # When mode = "multi", each enabled source gets its OWN OpenPets host on a

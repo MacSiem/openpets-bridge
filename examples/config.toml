@@ -10,16 +10,20 @@ push_throttle_s = 1.5
 enabled = true
 icon = "🤝"
 label = "Cowork"
+# Privacy: when true, bubble shows only tool glyph, never tool inputs.
+redact_body = false
 
 [sources.codex_cli]
 enabled = true
 icon = "🟢"
 label = "Codex"
+redact_body = false
 
 [sources.claude_code]
 enabled = false
 icon = "🟠"
 label = "Claude Code"
+redact_body = false
 
 # ---- Multi-pet example -----------------------------------------------------
 # Uncomment and switch [bridge].mode = "multi" to give each AI its own pet.

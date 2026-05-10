@@ -109,7 +109,10 @@ class MultiPetMode:
             cfg = self._configs.get(u.source_id)
             icon = cfg.icon if cfg else ""
             title = f"{icon} {u.title}".strip()
-            text = u.body or " "
+            if cfg and cfg.redact_body:
+                text = (u.body.split(" ", 1)[0] if u.body else "·")
+            else:
+                text = u.body or " "
 
             key = (u.source_id, u.session_id)
             st = self._threads.get(key)
@@ -130,7 +133,8 @@ class MultiPetMode:
             st.last_status = u.status
             st.last_text = text
             st.last_push_ts = now
+            # Privacy: log only metadata, never bubble content
             log.info(
-                "[multi/%s/%s] %s — %s",
-                u.source_id, u.session_id[:8] + "…", u.status, text,
+                "[multi/%s/%s] status=%s",
+                u.source_id, u.session_id[:8] + "…", u.status,
             )

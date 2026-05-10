@@ -122,32 +122,33 @@ class CodexCliSource(Source):
         if not self._sessions_root.is_dir():
             return
         now = time.time()
-        # Codex rotates per-day, only consider current day's files for cheapness
-        # (older sessions usually have task_complete already pushed)
         for path in self._sessions_root.glob("*/*/*/rollout-*.jsonl"):
             try:
                 stt = path.stat()
             except OSError:
                 continue
-            last_mtime, last_size, emitted_done = self._state.get(path, (0.0, 0, False))
-            is_active = (now - stt.st_mtime) < ACTIVITY_WINDOW_S
-            size_changed = stt.st_size != last_size
 
-            # session_id from filename: rollout-<ts>-<uuid>.jsonl
+            # First sighting → silent baseline; never emit for sessions that
+            # already existed when the bridge started.
+            if path not in self._state:
+                self._state[path] = (stt.st_mtime, stt.st_size, False)
+                continue
+
+            last_mtime, last_size, emitted_done = self._state[path]
+            size_grew = stt.st_size > last_size
+            is_active = (now - stt.st_mtime) < ACTIVITY_WINDOW_S
             sid = path.stem.split("-", 2)[-1]
 
-            if is_active and (size_changed or last_size == 0):
+            if is_active and size_grew:
                 status, body, terminal = _derive(_tail_jsonl(path))
                 self._state[path] = (stt.st_mtime, stt.st_size, terminal)
                 yield SourceUpdate(
                     source_id=self.id, session_id=sid,
                     title="Codex CLI", body=body, status=status, is_active=not terminal,
                 )
-            elif not is_active and not emitted_done and last_size > 0 \
-                    and last_size != stt.st_size \
-                    and (now - stt.st_mtime) > IDLE_AFTER_S:
-                # Only emit done if we previously observed THIS session grow.
-                # Prevents cold-start flood of every historical rollout.
+            elif (not is_active and not emitted_done and last_size > 0
+                  and last_size < stt.st_size
+                  and (now - stt.st_mtime) > IDLE_AFTER_S):
                 self._state[path] = (stt.st_mtime, stt.st_size, True)
                 yield SourceUpdate(
                     source_id=self.id, session_id=sid,

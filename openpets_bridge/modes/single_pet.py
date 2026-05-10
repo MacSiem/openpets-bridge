@@ -58,7 +58,13 @@ class SinglePetMode:
             self._threads[key] = st
 
         title = f"{cfg.icon} {u.title}".strip()
-        text = u.body or " "
+        # If the user enabled redact_body for this source, strip everything
+        # except the leading glyph (privacy mode — never echoes tool input
+        # like file paths, commands, queries, prompts to the bubble or log).
+        if cfg.redact_body:
+            text = (u.body.split(" ", 1)[0] if u.body else "·")
+        else:
+            text = u.body or " "
         now = time.time()
         same = (st.last_status == u.status and st.last_text == text)
         if same and (now - st.last_push_ts) < self._throttle:
@@ -73,7 +79,9 @@ class SinglePetMode:
         st.last_status = u.status
         st.last_text = text
         st.last_push_ts = now
+        # Privacy: log only short metadata, NEVER the bubble title/body
+        # (which may include user-submitted text, file paths, commands, …).
         log.info(
-            "[%s/%s] %s — %s — %s",
-            u.source_id, u.session_id[:8] + "…", u.status, title, text,
+            "[%s/%s] status=%s",
+            u.source_id, u.session_id[:8] + "…", u.status,
         )

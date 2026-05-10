@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openpets-bridge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Multi-AI desktop pet bridge for OpenPets — show every coding agent's status on one shared pet (or one pet per AI)"
 readme = "README.md"
 requires-python = ">=3.10"

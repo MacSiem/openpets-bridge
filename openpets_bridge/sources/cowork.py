@@ -171,32 +171,42 @@ class CoworkSource(Source):
                 stt = path.stat()
             except OSError:
                 continue
-            last_mtime, last_size, emitted_done = self._state.get(path, (0.0, 0, False))
+
+            # First time we see this path → silently baseline it. We never
+            # emit anything for sessions that were already on disk before
+            # the bridge started; only NEW activity (size growth) after
+            # baseline counts. This keeps the cold-start clean — no flood
+            # of historical "done" or stale "running" bubbles when the
+            # daemon (re)starts and finds 100s of old session files.
+            if path not in self._state:
+                self._state[path] = (stt.st_mtime, stt.st_size, False)
+                continue
+
+            last_mtime, last_size, emitted_done = self._state[path]
+            size_grew = stt.st_size > last_size
             is_active = (now - stt.st_mtime) < ACTIVITY_WINDOW_S
-            size_changed = stt.st_size != last_size
 
             session_id = path.parent.name  # local_<uuid>
-            title = _session_title(path)
 
-            if is_active and (size_changed or last_size == 0):
+            if is_active and size_grew:
                 status, body = _derive_status_text(_tail_json_lines(path))
                 self._state[path] = (stt.st_mtime, stt.st_size, False)
                 yield SourceUpdate(
                     source_id=self.id, session_id=session_id,
-                    title=title, body=body, status=status, is_active=True,
+                    title=_session_title(path),
+                    body=body, status=status, is_active=True,
                 )
-            elif not is_active and not emitted_done and last_size > 0 \
-                    and last_size != stt.st_size \
-                    and (now - stt.st_mtime) > IDLE_AFTER_S:
-                # Quiet long enough AND we've previously observed this session
-                # GROW (last_size != current_size means we saw it active before).
-                # Without that guard, the first poll floods every historical
-                # session with a 'done' bubble.
+            elif (not is_active and not emitted_done and last_size > 0
+                  and last_size < stt.st_size
+                  and (now - stt.st_mtime) > IDLE_AFTER_S):
+                # Was observed growing → now quiet long enough → emit done
+                # exactly once.
                 self._state[path] = (stt.st_mtime, stt.st_size, True)
                 yield SourceUpdate(
                     source_id=self.id, session_id=session_id,
-                    title=title, body="✓ Done", status="done", is_active=False,
+                    title=_session_title(path),
+                    body="✓ Done", status="done", is_active=False,
                 )
             else:
-                # Update bookkeeping but don't emit
+                # Update bookkeeping silently
                 self._state[path] = (stt.st_mtime, stt.st_size, emitted_done)

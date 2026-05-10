@@ -39,8 +39,11 @@ class SourceConfig:
     enabled: bool
     label: str             # display name, e.g. "Cowork"
     icon: str              # short single-glyph or emoji shown in bubble
-    pet: str | None = None # for multi-pet mode: pet pack id to use
-    extra: dict | None = None  # source-specific (paths, filters, ...)
+    pet: str | None = None       # multi-pet mode: pet pack id to use
+    redact_body: bool = False    # if True, bubble body shows ONLY the tool
+                                 # type/glyph — never inputs (safer for
+                                 # screenshots / streaming / pair-coding)
+    extra: dict | None = None    # source-specific (paths, filters, ...)
 
 
 class Source(abc.ABC):

@@ -44,26 +44,29 @@ class ClaudeCodeSource(Source):
                 stt = path.stat()
             except OSError:
                 continue
-            last_mtime, last_size, emitted_done = self._state.get(path, (0.0, 0, False))
-            is_active = (now - stt.st_mtime) < ACTIVITY_WINDOW_S
-            size_changed = stt.st_size != last_size
 
-            session_id = path.stem  # <uuid>.jsonl → uuid
-            # Encoded project dir → human-ish title
+            # First sighting → silent baseline; never emit for sessions
+            # that already existed when the bridge started.
+            if path not in self._state:
+                self._state[path] = (stt.st_mtime, stt.st_size, False)
+                continue
+
+            last_mtime, last_size, emitted_done = self._state[path]
+            size_grew = stt.st_size > last_size
+            is_active = (now - stt.st_mtime) < ACTIVITY_WINDOW_S
+            session_id = path.stem
             title = path.parent.name.replace("-", "/").lstrip("/").rsplit("/", 1)[-1] or "Claude Code"
 
-            if is_active and (size_changed or last_size == 0):
+            if is_active and size_grew:
                 status, body = _derive_status_text(_tail_json_lines(path))
                 self._state[path] = (stt.st_mtime, stt.st_size, False)
                 yield SourceUpdate(
                     source_id=self.id, session_id=session_id,
                     title=title, body=body, status=status, is_active=True,
                 )
-            elif not is_active and not emitted_done and last_size > 0 \
-                    and last_size != stt.st_size \
-                    and (now - stt.st_mtime) > IDLE_AFTER_S:
-                # Only emit done if we previously observed THIS session grow.
-                # Prevents cold-start flood of every historical project file.
+            elif (not is_active and not emitted_done and last_size > 0
+                  and last_size < stt.st_size
+                  and (now - stt.st_mtime) > IDLE_AFTER_S):
                 self._state[path] = (stt.st_mtime, stt.st_size, True)
                 yield SourceUpdate(
                     source_id=self.id, session_id=session_id,
