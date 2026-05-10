@@ -52,6 +52,11 @@ def run(cfg: BridgeConfig) -> int:
                     mode.consume(s.poll())
                 except Exception as e:  # noqa: BLE001
                     log.exception("source %s poll failed: %s", s.id, e)
+            # Periodic upkeep — clears stale 'done' bubbles, etc.
+            try:
+                mode.tick()
+            except Exception as e:  # noqa: BLE001
+                log.exception("mode tick failed: %s", e)
         except Exception as e:  # noqa: BLE001
             log.exception("loop iteration failed: %s", e)
         time.sleep(cfg.poll_interval_s)

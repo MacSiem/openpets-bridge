@@ -33,16 +33,11 @@ from typing import Iterable
 
 from ..openpets_client import OpenPetsClient, _resolve_binary
 from ..sources.base import SourceUpdate, SourceConfig
+from ..state import ThreadRecord, ThreadStore
 
 log = logging.getLogger("openpets-bridge.mode.multi")
 
-
-@dataclass(slots=True)
-class _ThreadState:
-    thread_id: str
-    last_status: str = ""
-    last_text: str = ""
-    last_push_ts: float = 0.0
+CLEAR_AFTER_S = 300.0
 
 
 def _socket_alive(path: str, bin_path: str) -> bool:
@@ -62,6 +57,7 @@ class MultiPetMode:
         self,
         source_configs: dict[str, SourceConfig],
         push_throttle_s: float = 1.5,
+        store: ThreadStore | None = None,
     ) -> None:
         self._configs = source_configs
         self._throttle = push_throttle_s
@@ -69,8 +65,8 @@ class MultiPetMode:
         self._clients: dict[str, OpenPetsClient] = {}
         # source_id → child process (the openpets run host)
         self._hosts: dict[str, subprocess.Popen] = {}
-        # (source_id, session_id) → _ThreadState
-        self._threads: dict[tuple[str, str], _ThreadState] = {}
+        self._store = store or ThreadStore()
+        self._store.load()
         self._spawn_hosts()
 
     # ------------------------------------------------------------------
@@ -167,27 +163,47 @@ class MultiPetMode:
             else:
                 text = u.body or " "
 
-            key = (u.source_id, u.session_id)
-            st = self._threads.get(key)
-            if st is None:
-                st = _ThreadState(thread_id=str(uuid.uuid4()).upper())
-                self._threads[key] = st
+            rec = self._store.get(u.source_id, u.session_id)
+            if rec is None:
+                rec = ThreadRecord(
+                    source_id=u.source_id, session_id=u.session_id,
+                    thread_id=str(uuid.uuid4()).upper(),
+                )
 
             now = time.time()
-            same = (st.last_status == u.status and st.last_text == text)
-            if same and (now - st.last_push_ts) < self._throttle:
+            same = (rec.last_status == u.status and rec.last_text == text)
+            if same and (now - rec.last_push_ts) < self._throttle:
                 continue
 
             new_tid = client.notify(
-                title=title, text=text, status=u.status, thread_id=st.thread_id,
+                title=title, text=text, status=u.status, thread_id=rec.thread_id,
             )
-            if new_tid and new_tid != st.thread_id:
-                st.thread_id = new_tid
-            st.last_status = u.status
-            st.last_text = text
-            st.last_push_ts = now
+            if new_tid and new_tid != rec.thread_id:
+                rec.thread_id = new_tid
+            rec.last_status = u.status
+            rec.last_text = text
+            rec.last_push_ts = now
+            rec.done_at = now if u.status == "done" else None
+            self._store.upsert(rec)
             # Privacy: log only metadata, never bubble content
-            log.info(
-                "[multi/%s/%s] status=%s",
-                u.source_id, u.session_id[:8] + "…", u.status,
-            )
+            log.info("[multi/%s/%s] status=%s",
+                     u.source_id, u.session_id[:8] + "…", u.status)
+        self._store.save()
+
+    # ------------------------------------------------------------------
+    def tick(self) -> None:
+        """Clear stale 'done' bubbles after CLEAR_AFTER_S of quiet."""
+        now = time.time()
+        for rec in list(self._store.all()):
+            if rec.done_at is None:
+                continue
+            if (now - rec.done_at) < CLEAR_AFTER_S:
+                continue
+            client = self._clients.get(rec.source_id)
+            if client is not None:
+                client.clear(rec.thread_id)
+            self._store.drop(rec.source_id, rec.session_id)
+            log.info("[multi/%s/%s] cleared after %.0fs idle",
+                     rec.source_id, rec.session_id[:8] + "…",
+                     now - rec.done_at)
+        self._store.save()

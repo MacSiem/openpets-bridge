@@ -157,6 +157,16 @@ the same way you would any unprivileged user-level daemon. No telemetry,
 no network calls, no analytics — zero runtime dependencies beyond Python's
 standard library.
 
+The bridge **does** persist a small state file at
+`~/.local/state/openpets-bridge/threads.json` (file mode `0600`, user-only)
+so that after a daemon restart the same conversation reuses the same
+OpenPets `threadId` — that way the next `notify` *replaces* the existing
+bubble instead of creating a duplicate. The state file mirrors what is
+shown in the bubble, so it respects `redact_body = true` per source. If
+you'd prefer no state on disk, set `redact_body = true` and clear the file
+periodically — or `rm ~/.local/state/openpets-bridge/threads.json` (the
+bridge will rebuild it).
+
 ## How it compares
 
 | | `claude-pets` | `opencode-pets` | **`openpets-bridge`** |
