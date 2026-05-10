@@ -68,13 +68,23 @@ if [[ ! -d /Applications/OpenPets.app ]]; then
 fi
 ok "OpenPets.app present"
 
-# 5. Install or upgrade openpets-bridge
+# 5. Install or upgrade openpets-bridge (with [menubar] extra by default)
+#    Skip the menubar extra by setting OPENPETS_BRIDGE_HEADLESS=1 before running.
+EXTRAS=""
+if [[ -z "${OPENPETS_BRIDGE_HEADLESS:-}" ]]; then
+  EXTRAS="[menubar]"
+fi
 if pipx list 2>/dev/null | grep -q "openpets-bridge"; then
   c_blue "Upgrading openpets-bridge..."
   pipx upgrade openpets-bridge
+  # Re-inject menubar extra in case the user enabled it on a previous
+  # headless install
+  if [[ -n "$EXTRAS" ]]; then
+    pipx inject openpets-bridge rumps 2>/dev/null || true
+  fi
 else
-  c_blue "Installing openpets-bridge from GitHub..."
-  pipx install "git+${REPO}"
+  c_blue "Installing openpets-bridge from GitHub${EXTRAS:+ (with menubar app)}..."
+  pipx install "openpets-bridge${EXTRAS} @ git+${REPO}"
 fi
 ok "openpets-bridge installed: $(command -v openpets-bridge)"
 
@@ -88,17 +98,19 @@ ok "launchd agent registered"
 
 cat <<MSG
 
-  All set. Status:
+  All set. Look for the 🐾 in your menu bar — that's the openpets-bridge
+  control panel. Click it for: status, start/stop, open config, open log,
+  list installed pet packs.
 
-      openpets-bridge status
+  Or from the terminal:
 
-  Tail the live log:
-
+      openpets-bridge status                # health check
+      openpets-bridge list-pets             # discover installed pet packs
       tail -f ~/ai-stack/openpets-bridge/bridge.log
-
-  Edit which AIs to follow / privacy mode:
-
       open ~/.config/openpets-bridge/config.toml
+
+  Headless install (no menubar): set OPENPETS_BRIDGE_HEADLESS=1 before
+  running this script, or use \`openpets-bridge install --no-menubar\`.
 
   Uninstall (anytime):
 

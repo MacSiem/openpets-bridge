@@ -34,8 +34,21 @@ bash install.sh
 ```
 
 The installer checks Python ≥ 3.10, pipx, and OpenPets.app, then installs
-the bridge in an isolated pipx venv, writes a default config, and registers
-a launchd agent so it auto-starts at login.
+the bridge in an isolated pipx venv, writes a default config, registers
+two launchd agents so they auto-start at login (the headless **bridge
+daemon** + an optional **menu-bar app**), and prints a one-line summary.
+
+After install you should see a 🐾 icon in your macOS menu bar — click it
+for status, start/stop, open config, open log, list installed pet packs,
+and a link to the docs.
+
+For a headless install (server / CI / no menubar):
+
+```bash
+OPENPETS_BRIDGE_HEADLESS=1 bash install.sh
+# or after install:
+openpets-bridge install --no-menubar
+```
 
 > **Prerequisite:** [OpenPets ≥ 0.6](https://github.com/alterhq/openpets/releases/latest)
 > (the **alterhq** native Swift build — not the older alvinunreal Electron

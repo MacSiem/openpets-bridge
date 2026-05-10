@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openpets-bridge"
-version = "0.1.2"
+version = "0.1.3"
 description = "Multi-AI desktop pet bridge for OpenPets — show every coding agent's status on one shared pet (or one pet per AI)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,10 +25,12 @@ dependencies = []  # zero runtime deps — stdlib only
 
 [project.optional-dependencies]
 toml = ["tomli;python_version<'3.11'"]
-dev = ["pytest", "ruff", "mypy"]
+menubar = ["rumps>=0.4.0"]
+dev = ["pytest", "ruff", "mypy", "rumps>=0.4.0"]
 
 [project.scripts]
 openpets-bridge = "openpets_bridge.cli:main"
+openpets-bridge-menubar = "openpets_bridge.menubar:main"
 
 [project.urls]
 Homepage = "https://github.com/MacSiem/openpets-bridge"
