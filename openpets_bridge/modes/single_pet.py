@@ -8,12 +8,15 @@ stack independently. The bubble title is prefixed with the source's icon
 Per-conversation persistence (since 0.1.4):
 
 * ThreadIds are persisted to ``~/.local/state/openpets-bridge/threads.json``
-  so a daemon restart picks up exactly where it left off — same conversation
-  → same threadId → next ``notify`` REPLACES the existing bubble (no
-  duplicates from restart).
-* When a conversation goes done and stays quiet for ``CLEAR_AFTER_S``
-  (default 5 min), the bubble is fully cleared from OpenPets via
-  ``openpets clear --thread <id>`` and dropped from state.
+  so a daemon restart picks up exactly where it left off — same
+  conversation → same threadId → next ``notify`` REPLACES the existing
+  bubble (no duplicates from restart).
+* The **last bubble per session stays** — when a conversation goes idle
+  the bridge pushes ``status=done`` and that bubble persists indefinitely
+  as a record of the last state. It only gets replaced when the same
+  session resumes activity, or cleared explicitly by the user (menubar
+  "Clear bubbles" actions, ``openpets clear --thread <id>``, or by
+  setting ``[bridge].auto_clear_after_s`` in config).
 """
 
 from __future__ import annotations
@@ -29,10 +32,6 @@ from ..state import ThreadRecord, ThreadStore
 
 log = logging.getLogger("openpets-bridge.mode.single")
 
-# After status=done, wait this long with no further activity before fully
-# clearing the bubble from OpenPets. Tunable via env if needed later.
-CLEAR_AFTER_S = 300.0
-
 
 class SinglePetMode:
     """Aggregate every source into one OpenPets host."""
@@ -41,11 +40,15 @@ class SinglePetMode:
         self,
         source_configs: dict[str, SourceConfig],
         push_throttle_s: float = 1.5,
+        auto_clear_after_s: float | None = None,
         store: ThreadStore | None = None,
     ) -> None:
         self._client = OpenPetsClient()
         self._configs = source_configs
         self._throttle = push_throttle_s
+        # If None or <= 0, last 'done' bubble per session persists forever
+        # (the user can clear manually via the menubar).
+        self._auto_clear_after_s = auto_clear_after_s
         self._store = store or ThreadStore()
         self._store.load()
 
@@ -56,20 +59,22 @@ class SinglePetMode:
         self._store.save()  # debounced internally
 
     def tick(self) -> None:
-        """Call every poll iteration so we can clear stale 'done' bubbles."""
+        """Periodic upkeep. Only clears bubbles when the user opted in
+        via [bridge].auto_clear_after_s in config (defaults to off — last
+        bubble per session is meant to persist as a record of state)."""
+        if self._auto_clear_after_s is None or self._auto_clear_after_s <= 0:
+            return
         now = time.time()
         for rec in list(self._store.all()):
             if rec.done_at is None:
                 continue
-            if (now - rec.done_at) < CLEAR_AFTER_S:
+            if (now - rec.done_at) < self._auto_clear_after_s:
                 continue
             self._client.clear(rec.thread_id)
             self._store.drop(rec.source_id, rec.session_id)
-            log.info(
-                "[%s/%s] cleared (idle for %.0fs after done)",
-                rec.source_id, rec.session_id[:8] + "…",
-                now - rec.done_at,
-            )
+            log.info("[%s/%s] cleared (auto, idle for %.0fs after done)",
+                     rec.source_id, rec.session_id[:8] + "…",
+                     now - rec.done_at)
         self._store.save()
 
     # ------------------------------------------------------------------

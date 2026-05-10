@@ -35,10 +35,15 @@ def run(cfg: BridgeConfig) -> int:
         return 1
     log.info("Sources: %s", ", ".join(s.id for s in sources))
 
+    auto_clear = cfg.auto_clear_after_s if cfg.auto_clear_after_s > 0 else None
     if cfg.mode == "multi":
-        mode = MultiPetMode(cfg.sources, push_throttle_s=cfg.push_throttle_s)
+        mode = MultiPetMode(cfg.sources,
+                            push_throttle_s=cfg.push_throttle_s,
+                            auto_clear_after_s=auto_clear)
     else:
-        mode = SinglePetMode(cfg.sources, push_throttle_s=cfg.push_throttle_s)
+        mode = SinglePetMode(cfg.sources,
+                             push_throttle_s=cfg.push_throttle_s,
+                             auto_clear_after_s=auto_clear)
 
     stop = {"flag": False}
     def _stop(*_): stop["flag"] = True

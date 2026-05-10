@@ -79,6 +79,10 @@ class BridgeConfig:
     mode: str = "single"           # "single" | "multi"
     poll_interval_s: float = 1.0
     push_throttle_s: float = 1.5
+    # 0 / unset → bubbles for ended sessions PERSIST (last status per
+    # session stays until the user clears manually via the menubar).
+    # Set to e.g. 600 to auto-wipe a 'done' bubble after 10 min of quiet.
+    auto_clear_after_s: float = 0.0
     log_path: str = str(Path.home() / "ai-stack/openpets-bridge/bridge.log")
     sources: dict[str, SourceConfig] = field(default_factory=dict)
 
@@ -107,6 +111,8 @@ def load(path: Path | str | None = None) -> BridgeConfig:
     cfg.mode = str(bridge_raw.get("mode", cfg.mode))
     cfg.poll_interval_s = float(bridge_raw.get("poll_interval_s", cfg.poll_interval_s))
     cfg.push_throttle_s = float(bridge_raw.get("push_throttle_s", cfg.push_throttle_s))
+    cfg.auto_clear_after_s = float(bridge_raw.get("auto_clear_after_s",
+                                                   cfg.auto_clear_after_s))
     cfg.log_path = str(bridge_raw.get("log_path", cfg.log_path))
 
     sources_raw = raw.get("sources", {}) or {}
@@ -133,6 +139,11 @@ _DEFAULT_TOML = """\
 mode = "single"            # "single" (one pet, AI icon per bubble) | "multi"
 poll_interval_s = 1.0
 push_throttle_s = 1.5
+# 0 (default) = the LAST bubble per session persists indefinitely. The user
+# clears manually via the menubar ("Clear all bubbles" / "Clear done").
+# Set e.g. 600.0 to auto-wipe each session's bubble 10 minutes after it
+# went 'done'.
+auto_clear_after_s = 0.0
 
 # ---- Sources --------------------------------------------------------------
 # Set enabled=true for each agent runtime you want the pet to react to.

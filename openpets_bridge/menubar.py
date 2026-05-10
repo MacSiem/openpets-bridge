@@ -44,6 +44,7 @@ except ImportError as e:  # pragma: no cover
 from . import __version__
 from . import pets as petsmod
 from .openpets_client import OpenPetsClient
+from .state import ThreadStore
 
 LAUNCHD_LABEL = "sh.openpets.bridge"
 CONFIG_PATH = Path.home() / ".config/openpets-bridge/config.toml"
@@ -117,6 +118,9 @@ class OpenPetsBridgeMenubar(rumps.App):
             rumps.MenuItem("Open config…", callback=self.on_open_config),
             rumps.MenuItem("Open log…", callback=self.on_open_log),
             rumps.MenuItem("List installed pets", callback=self.on_list_pets),
+            None,
+            rumps.MenuItem("Clear done bubbles", callback=self.on_clear_done),
+            rumps.MenuItem("Clear ALL bubbles…", callback=self.on_clear_all),
             None,
             rumps.MenuItem("Documentation", callback=self.on_docs),
             rumps.MenuItem(f"openpets-bridge v{__version__}", callback=None),
@@ -204,6 +208,52 @@ class OpenPetsBridgeMenubar(rumps.App):
         rumps.alert(
             title=f"{len(pets)} pet pack(s) installed",
             message=body,
+        )
+
+    def on_clear_done(self, _) -> None:
+        """Clear bubbles for sessions that already finished (status=done)."""
+        store = ThreadStore()
+        store.load()
+        client = OpenPetsClient()
+        cleared = 0
+        for rec in list(store.all()):
+            if rec.last_status != "done":
+                continue
+            client.clear(rec.thread_id)
+            store.drop(rec.source_id, rec.session_id)
+            cleared += 1
+        store.save(force=True)
+        rumps.notification(
+            title="openpets-bridge",
+            subtitle=f"Cleared {cleared} done bubble(s)",
+            message="Active conversations were left alone.",
+        )
+
+    def on_clear_all(self, _) -> None:
+        """Clear EVERY bubble — active and done. Asks for confirmation."""
+        confirm = rumps.alert(
+            title="Clear all bubbles?",
+            message=("This removes every OpenPets bubble created by the "
+                     "bridge, including active conversations. They will "
+                     "reappear on the next activity from each session."),
+            ok="Clear all",
+            cancel="Cancel",
+        )
+        if confirm != 1:
+            return
+        store = ThreadStore()
+        store.load()
+        client = OpenPetsClient()
+        cleared = 0
+        for rec in list(store.all()):
+            client.clear(rec.thread_id)
+            store.drop(rec.source_id, rec.session_id)
+            cleared += 1
+        store.save(force=True)
+        rumps.notification(
+            title="openpets-bridge",
+            subtitle=f"Cleared {cleared} bubble(s)",
+            message="Active sessions will repopulate on next activity.",
         )
 
     def on_docs(self, _) -> None:

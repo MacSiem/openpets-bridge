@@ -37,8 +37,6 @@ from ..state import ThreadRecord, ThreadStore
 
 log = logging.getLogger("openpets-bridge.mode.multi")
 
-CLEAR_AFTER_S = 300.0
-
 
 def _socket_alive(path: str, bin_path: str) -> bool:
     """Probe whether something is listening on the given socket."""
@@ -57,10 +55,12 @@ class MultiPetMode:
         self,
         source_configs: dict[str, SourceConfig],
         push_throttle_s: float = 1.5,
+        auto_clear_after_s: float | None = None,
         store: ThreadStore | None = None,
     ) -> None:
         self._configs = source_configs
         self._throttle = push_throttle_s
+        self._auto_clear_after_s = auto_clear_after_s
         # source_id → OpenPetsClient bound to that host's socket
         self._clients: dict[str, OpenPetsClient] = {}
         # source_id → child process (the openpets run host)
@@ -192,18 +192,21 @@ class MultiPetMode:
 
     # ------------------------------------------------------------------
     def tick(self) -> None:
-        """Clear stale 'done' bubbles after CLEAR_AFTER_S of quiet."""
+        """Periodic upkeep — only clears bubbles when [bridge].auto_clear_after_s
+        is set in config (defaults to off; last bubble per session persists)."""
+        if self._auto_clear_after_s is None or self._auto_clear_after_s <= 0:
+            return
         now = time.time()
         for rec in list(self._store.all()):
             if rec.done_at is None:
                 continue
-            if (now - rec.done_at) < CLEAR_AFTER_S:
+            if (now - rec.done_at) < self._auto_clear_after_s:
                 continue
             client = self._clients.get(rec.source_id)
             if client is not None:
                 client.clear(rec.thread_id)
             self._store.drop(rec.source_id, rec.session_id)
-            log.info("[multi/%s/%s] cleared after %.0fs idle",
+            log.info("[multi/%s/%s] cleared (auto, idle for %.0fs after done)",
                      rec.source_id, rec.session_id[:8] + "…",
                      now - rec.done_at)
         self._store.save()
