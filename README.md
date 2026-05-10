@@ -53,6 +53,13 @@ openpets-bridge install     # registers the launchd agent
 
 ## Configure
 
+Three tiers depending on how much you want to fiddle — full guide in
+[**docs/CONFIGURATION.md**](./docs/CONFIGURATION.md):
+
+* **Easy** — install once, never edit anything. Cowork + Codex CLI auto-detected.
+* **Common tweaks** — turn AIs on/off, change icons, enable privacy mode, switch pet sprite.
+* **Advanced** — multi-pet mode, custom AI sources, alternate paths, no-launchd run.
+
 Edit `~/.config/openpets-bridge/config.toml`. Defaults already enable
 Cowork and Codex CLI; flip Claude Code on if you use the `claude` CLI.
 
